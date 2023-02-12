@@ -1,13 +1,13 @@
 pub mod console_system {
 
+    use logger::log::*;
     use sdl2::rect::Rect;
     use sdl2::render::TextureQuery;
     use std::process::Command;
     use std::process::Stdio;
-    use logger::log::*;
 
     /// Console struct containing information for console
-    pub struct Console {
+    pub struct Console<'a> {
         x: i32,
         y: i32,
         w: u32,
@@ -18,6 +18,7 @@ pub mod console_system {
         color: sdl2::pixels::Color,
         visible: bool,
         log: Log,
+        background: Option<sdl2::render::Texture<'a>>,
     }
 
     /// printtext function for printing text to the screen
@@ -114,10 +115,9 @@ pub mod console_system {
         }
     }
 
-
-    impl Console {
+    impl<'a> Console<'a> {
         /// create a new console
-        pub fn new(xx: i32, yx: i32, wx: u32, hx: u32) -> Console {
+        pub fn new(xx: i32, yx: i32, wx: u32, hx: u32) -> Console<'a> {
             let home_dir = dirs::home_dir();
             match home_dir {
                 Some(hdir) => {
@@ -141,8 +141,13 @@ pub mod console_system {
                 line_height: 27,
                 color: sdl2::pixels::Color::RGB(255, 255, 255),
                 visible: true,
-                log: log_
+                log: log_,
+                background: None,
             }
+        }
+
+        pub fn set_background(&mut self, back: sdl2::render::Texture<'a>) {
+            self.background = Some(back);
         }
 
         /// set console text color
@@ -380,6 +385,23 @@ pub mod console_system {
         ) {
             if !self.visible {
                 return;
+            }
+
+            match &self.background {
+                Some(b) => {
+                    let TextureQuery {
+                        width: wi,
+                        height: hi,
+                        ..
+                    } = b.query();
+                    can.copy(
+                        &b,
+                        Some(Rect::new(0, 0, wi, hi)),
+                        Some(Rect::new(0, 0, self.w, self.h)),
+                    )
+                    .expect("on background copy");
+                }
+                None => {}
             }
 
             let f = self.text.find('\n');
