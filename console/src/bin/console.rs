@@ -20,22 +20,23 @@ fn main() {
         .build()
         .map_err(|e| e.to_string())
         .expect("Error on canvas");
-    let bg =  sdl2::surface::Surface::load_bmp("./bg.bmp").unwrap();
-  
+    let bg = sdl2::surface::Surface::load_bmp("./bg.bmp").unwrap();
+
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
     let font = ttf_context.load_font("./font.ttf", 18).expect("test");
     let tc = can.texture_creator();
     let bg_tex = tc.create_texture_from_surface(bg).unwrap();
- 
+
     let _text_surf = font
         .render("Hello, World!")
         .blended(Color::RGB(255, 255, 255))
         .unwrap();
     let mut e = sdl.event_pump().unwrap();
     let mut flash = 0;
-    let mut con = Console::new(25, 25, width as u32, height as u32);
+    let tc_tex = can.texture_creator();
+    let mut con = Console::new(25, 25, width as u32, height as u32, &tc_tex);
     con.set_text_color(Color::RGB(255, 255, 255));
-     con.set_background(bg_tex);
+    con.set_background(bg_tex);
     con.print_prompt();
     con.set_visible(true);
     'main: loop {

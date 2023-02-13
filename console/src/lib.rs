@@ -19,6 +19,7 @@ pub mod console_system {
         visible: bool,
         log: Log,
         background: Option<sdl2::render::Texture<'a>>,
+        tc: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
     }
 
     /// printtext function for printing text to the screen
@@ -117,7 +118,7 @@ pub mod console_system {
 
     impl<'a> Console<'a> {
         /// create a new console
-        pub fn new(xx: i32, yx: i32, wx: u32, hx: u32) -> Console<'a> {
+        pub fn new(xx: i32, yx: i32, wx: u32, hx: u32, tex: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>) -> Console<'a> {
             let home_dir = dirs::home_dir();
             match home_dir {
                 Some(hdir) => {
@@ -143,6 +144,7 @@ pub mod console_system {
                 visible: true,
                 log: log_,
                 background: None,
+                tc: tex,
             }
         }
 
@@ -219,6 +221,23 @@ pub mod console_system {
                     } else {
                         self.change_dir(v[1]);
                         self.print("\n");
+                    }
+                }
+                "setbg" => {
+                    if v.len() != 2 {
+                        self.println("\n Requires path...\n");
+                    } else {
+                        let img = sdl2::surface::Surface::load_bmp(v[1]);
+                        match img {
+                            Ok(surf) => {
+                                let tex: sdl2::render::Texture = self.tc.create_texture_from_surface(surf).unwrap();
+                                self.set_background(tex);
+                                self.println(&format!("set background: {}", v[1]));
+                            }
+                            Err(e) => {
+                                self.println(&format!("\nError: {}", e));
+                            }
+                        }
                     }
                 }
                 "setcolor" => {
