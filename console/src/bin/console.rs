@@ -23,7 +23,7 @@ fn main() {
     let bg = sdl2::surface::Surface::load_bmp("./bg.bmp").unwrap();
 
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
-    let font = ttf_context.load_font("./font.ttf", 18).expect("test");
+    let font = ttf_context.load_font("./font.ttf", 24).expect("test");
     let tc = can.texture_creator();
     let bg_tex = tc.create_texture_from_surface(bg).unwrap();
 
