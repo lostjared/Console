@@ -232,7 +232,7 @@ pub mod console_system {
                             Ok(surf) => {
                                 let tex: sdl2::render::Texture = self.tc.create_texture_from_surface(surf).unwrap();
                                 self.set_background(tex);
-                                self.println(&format!("set background: {}", v[1]));
+                                self.println(&format!("\nset background: {}", v[1]));
                             }
                             Err(e) => {
                                 self.println(&format!("\nError: {}", e));
