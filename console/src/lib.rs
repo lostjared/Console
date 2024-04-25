@@ -5,7 +5,7 @@ pub mod console_system {
     use sdl2::render::TextureQuery;
     use std::process::Command;
     use std::process::Stdio;
-
+    use std::io::Write;
     /// Console struct containing information for console
     pub struct Console<'a> {
         x: i32,
@@ -211,6 +211,32 @@ pub mod console_system {
             self.print(&format!("[{}]=)>", path.display()));
         }
 
+        fn execute_shell_command(&mut self, command: &str) {
+            let mut child = Command::new("/bin/sh")
+                .arg("-c")
+                .arg(command)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("Failed to execute shell");
+    
+            if let Some(ref mut stdin) = child.stdin.take() {
+                if let Err(e) = writeln!(stdin, "{}", self.input_text) {
+                    self.println(&format!("\nFailed to write to shell stdin: {}", e));
+                }
+            }
+    
+            let output = child.wait_with_output().expect("Failed to read shell output");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+    
+            self.println(&format!("\n{}", stdout));
+            if !stderr.is_empty() {
+                self.println(&format!("{}", stderr));
+            }
+        }
+
         /// process a shell command
         pub fn proc_command(&mut self, v: Vec<&str>, cmd: &str) {
             let name = v[0];
@@ -292,29 +318,11 @@ pub mod console_system {
                     }
                 }
                 "shell" => {
-                    let output;
-                    if !v.is_empty() && cmd.len() > 6 {
-                        let icmd = &cmd[6..cmd.len()];
-                        output = Command::new("/bin/sh")
-                            .arg("-c")
-                            .arg(icmd)
-                            .stdout(Stdio::piped())
-                            .output();
-
-                        match output {
-                            Ok(output) => {
-                                let stdout = String::from_utf8(output.stdout).unwrap();
-                                self.print("\n");
-                                self.print(&stdout);
-                            }
-                            Err(s) => {
-                                self.print("\n");
-                                let s = format!("{}", s);
-                                self.println(&s);
-                            }
-                        }
+                    if cmd.len() > 6 {
+                        let icmd = &cmd[6..];
+                        self.execute_shell_command(icmd);
                     } else {
-                        self.println("\nError invalid command..");
+                        self.println("\nError: Invalid shell command.");
                     }
                 }
 
