@@ -1,12 +1,14 @@
 pub mod console_system {
-
     use logger::log::*;
     use sdl2::rect::Rect;
     use sdl2::render::TextureQuery;
-    use std::process::Command;
-    use std::process::Stdio;
-    use std::io::Write;
-    /// Console struct containing information for console
+    use std::io::{{BufRead, BufReader, Write}};
+    use std::process::{{Command, Stdio, Child}};
+    use std::sync::mpsc::{{self, Sender, Receiver}};
+    use sdl2::event::Event;
+    use sdl2::keyboard::Keycode;
+    use std::sync::{Arc, Mutex};
+    use std::io::Read;
     pub struct Console<'a> {
         x: i32,
         y: i32,
@@ -20,9 +22,11 @@ pub mod console_system {
         log: Log,
         background: Option<sdl2::render::Texture<'a>>,
         tc: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
+        child: Option<Child>,
+        input_sender: Option<Sender<String>>,
+        output_receiver: Option<Receiver<String>>,
     }
 
-    /// printtext function for printing text to the screen
     pub fn printtext(
         can: &mut sdl2::render::Canvas<sdl2::video::Window>,
         tex: &sdl2::render::TextureCreator<sdl2::video::WindowContext>,
@@ -145,7 +149,125 @@ pub mod console_system {
                 log: log_,
                 background: None,
                 tc: tex,
+                child: None,
+                input_sender: None,
+                output_receiver: None,
             }
+        }
+
+
+       pub fn shutdown(&mut self) {
+            if let Some(mut child) = self.child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        } 
+
+        pub fn start_shell(&mut self) {
+            let (input_tx, input_rx) = mpsc::channel::<String>();
+            let (output_tx, output_rx) = mpsc::channel::<String>();
+            let output_tx = Arc::new(Mutex::new(output_tx));
+            let mut child = Command::new("/bin/sh")
+                .arg("-i")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("failed to start shell");
+        
+            let stdin = child.stdin.take().unwrap();
+            std::thread::spawn(move || {
+                let mut stdin = stdin;
+                for input in input_rx {
+                    if writeln!(stdin, "{}", input).is_err() {
+                        break;
+                    }
+                }
+            });
+        
+            let stdout = child.stdout.take().unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let stdout_tx = Arc::clone(&output_tx);
+            std::thread::spawn(move || {
+                let mut stdout_reader = BufReader::new(stdout);
+                let mut buffer = [0; 1]; 
+                while let Ok(bytes_read) = stdout_reader.read(&mut buffer) {
+                    if bytes_read == 0 {
+                        break; 
+                    }
+                    let mut tx = stdout_tx.lock().unwrap();
+                    let mut s = String::new();
+                    s.push(buffer[0] as char);
+                    tx.send(s).expect("failed to send stdout byte to main thread");
+                }
+            });
+            let stderr_tx = Arc::clone(&output_tx);
+            std::thread::spawn(move || {
+                let mut stderr_reader = BufReader::new(stderr);
+                let mut buffer = [0; 1]; 
+                while let Ok(bytes_read) = stderr_reader.read(&mut buffer) {
+                    if bytes_read == 0 {
+                        break; 
+                    }
+                    let mut tx = stderr_tx.lock().unwrap();
+                    let mut s = String::new();
+                    s.push(buffer[0] as char);
+                    tx.send(s).expect("failed to send stdout byte to main thread");
+                }
+            });
+            self.child = Some(child);
+            self.input_sender = Some(input_tx);
+            self.output_receiver = Some(output_rx);
+        }
+        pub fn handle_sdl_events(&mut self, event_pump: &mut sdl2::EventPump) -> i32 {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit {..} => { self.shutdown(); std::process::exit(0); },
+                    Event::KeyDown { keycode: Some(keycode), .. } => {
+                        match keycode {
+                            Keycode::Escape => {
+                                return -1;
+                            }
+                            Keycode::Return => {
+                                if let Some(ref sender) = self.input_sender {
+                                    if !self.input_text.is_empty() {
+                                        sender.send(self.input_text.clone()).expect("failed to send input");
+                                        self.input_text.clear();
+                                    }
+                                }
+                            },
+                            Keycode::Backspace => {
+                                self.input_text.pop();
+                            },
+                            _ => {}
+                        }
+                    },
+                    Event::TextInput { text, .. } => {
+                        self.input_text.push_str(&text);
+                    },
+                    _ => {}
+                }
+            }
+
+            if let Some(ref receiver) = self.output_receiver {
+                loop {
+                    match receiver.try_recv() {
+                        Ok(output_byte) => {
+                             self.text.push_str(&output_byte);
+                        },
+                        Err(e) => {
+                            if e == std::sync::mpsc::TryRecvError::Empty {
+                                break; 
+                            } else if e == std::sync::mpsc::TryRecvError::Disconnected {
+                                println!("Channel disconnected");
+                                return -1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            0
         }
 
         pub fn set_background(&mut self, back: sdl2::render::Texture<'a>) {
@@ -207,10 +329,11 @@ pub mod console_system {
 
         /// print the prompt
         pub fn print_prompt(&mut self) {
-            let path = std::env::current_dir().unwrap();
-            self.print(&format!("[{}]=)>", path.display()));
+            //let path = std::env::current_dir().unwrap();
+            self.print("$");
         }
 
+        /*
         fn execute_shell_command(&mut self, command: &str) {
             let mut child = Command::new("/bin/sh")
                 .arg("-c")
@@ -235,173 +358,7 @@ pub mod console_system {
             if !stderr.is_empty() {
                 self.println(&format!("{}", stderr));
             }
-        }
-
-        /// process a shell command
-        pub fn proc_command(&mut self, v: Vec<&str>, cmd: &str) {
-            let name = v[0];
-            match name {
-                "cd" => {
-                    if v.len() != 2 {
-                        self.println("\n Requires path...\n");
-                    } else {
-                        self.change_dir(v[1]);
-                        self.print("\n");
-                    }
-                }
-                "setbg" => {
-                    if v.len() != 2 {
-                        self.println("\n Requires path...\n");
-                    } else {
-                        let img = sdl2::surface::Surface::load_bmp(v[1]);
-                        match img {
-                            Ok(surf) => {
-                                let tex: sdl2::render::Texture = self.tc.create_texture_from_surface(surf).unwrap();
-                                self.set_background(tex);
-                                self.println(&format!("\nset background: {}", v[1]));
-                            }
-                            Err(e) => {
-                                self.println(&format!("\nError: {}", e));
-                            }
-                        }
-                    }
-                }
-                "setcolor" => {
-                    if v.len() != 4 {
-                        self.println("\nError requires r g b arguments...\n");
-                    } else {
-                        let r = v[1].parse::<u8>();
-                        let g = v[2].parse::<u8>();
-                        let b = v[3].parse::<u8>();
-
-                        let rr: u8;
-                        let gg: u8;
-                        let bb: u8;
-
-                        match r {
-                            Ok(r_r) => {
-                                rr = r_r;
-                            }
-                            Err(_) => {
-                                self.println("\nError on setcolor");
-                                self.input_text = String::new();
-                                self.print_prompt();
-                                return;
-                            }
-                        }
-                        match g {
-                            Ok(g_g) => {
-                                gg = g_g;
-                            }
-                            Err(_) => {
-                                self.println("\nError on setcolor");
-                                self.input_text = String::new();
-                                self.print_prompt();
-                                return;
-                            }
-                        }
-
-                        match b {
-                            Ok(b_b) => {
-                                bb = b_b;
-                            }
-                            Err(_) => {
-                                self.println("\nError on setcolor");
-                                self.input_text = String::new();
-                                self.print_prompt();
-                                return;
-                            }
-                        }
-
-                        self.color = sdl2::pixels::Color::RGB(rr, gg, bb);
-                        self.println("\nColor set.\n");
-                    }
-                }
-                "shell" => {
-                    if cmd.len() > 6 {
-                        let icmd = &cmd[6..];
-                        self.execute_shell_command(icmd);
-                    } else {
-                        self.println("\nError: Invalid shell command.");
-                    }
-                }
-
-                "about" => {
-                    self.println("\nRust SDL Console v1.0. https://github.com/lostjared\nhttp://lostsidedead.com");
-                }
-
-                "exit" => {
-                    std::process::exit(0);
-                }
-
-                "clear" => {
-                    self.text.clear();
-                }
-                "hide" => {
-                    self.set_visible(false);
-                    self.print("\n");
-                }
-
-                "exec" => {
-                    if v.len() >= 2 {
-                        let name = v[1];
-                        let output;
-                        if v.len() > 2 {
-                            let args = &v[2..v.len()];
-                            output = Command::new(name)
-                                .args(args)
-                                .stdout(Stdio::piped())
-                                .output();
-                        } else if v.len() == 2 {
-                            output = Command::new(name).stdout(Stdio::piped()).output();
-                        } else {
-                            self.println("Error requires argument...\n");
-                            self.print_prompt();
-                            return;
-                        }
-
-                        match output {
-                            Ok(output) => {
-                                let stdout = String::from_utf8(output.stdout).unwrap();
-                                self.print("\n");
-                                self.print(&stdout);
-                            }
-                            _ => {
-                                self.print("\n");
-                                let s = format!("{:?}", output.unwrap_err());
-                                self.println(&s);
-                            }
-                        }
-                    } else {
-                        self.println("\nError requires argument of command...");
-                    }
-                }
-                _ => {
-                    self.print("\n");
-                }
-            }
-            self.input_text = String::new();
-            self.print_prompt();
-        }
-
-        /// send enter key to console
-        pub fn enter(&mut self) {
-            if !self.visible {
-                return;
-            }
-
-            // proc command
-            let input = String::from(&self.input_text);
-            let v: Vec<&str> = input.split(' ').collect();
-            if v.is_empty() {
-                self.print("\n");
-                self.print_prompt();
-                return;
-            }
-            self.proc_command(v, &input);
-            self.log.i(&format!("command: {}", input));
-        }
-
+        }*/
         /// draw the console
         pub fn draw(
             &mut self,
@@ -437,6 +394,10 @@ pub mod console_system {
                 self.text = String::from(v);
             }
 
+            let mut total = String::new();
+            total.push_str(&self.text);
+            total.push_str(&self.input_text);
+
             printtext_width(
                 blink,
                 &mut self.line_height,
@@ -448,7 +409,7 @@ pub mod console_system {
                 self.w,
                 self.h,
                 self.color,
-                &self.text,
+                &total,
             );
         }
     }

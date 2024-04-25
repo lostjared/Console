@@ -1,11 +1,9 @@
 use console::console_system::Console;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 
 fn main() {
-    let width = 1280;
-    let height = 720;
+    let width = 1920;
+    let height = 1080;
     let sdl = sdl2::init().unwrap();
     let video = sdl.video().unwrap();
     video.text_input().start();
@@ -39,35 +37,11 @@ fn main() {
     con.set_background(bg_tex);
     con.print_prompt();
     con.set_visible(true);
+    con.start_shell(); 
+
     'main: loop {
-        for _event in e.poll_iter() {
-            match _event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'main,
-                Event::TextInput {
-                    timestamp: _,
-                    window_id: _,
-                    text: s,
-                } => {
-                    con.type_key(&s);
-                }
-                Event::KeyDown { keycode: key, .. } => {
-                    if key == Some(Keycode::Backspace) {
-                        con.back();
-                    }
-                    if key == Some(Keycode::Return) {
-                        if !con.get_visible() {
-                            con.set_visible(true);
-                        } else {
-                            con.enter();
-                        }
-                    }
-                }
-                _ => {}
-            }
+        if con.handle_sdl_events(&mut e) == -1 {
+            break 'main;
         }
         can.set_draw_color(Color::RGB(0, 0, 0));
         can.clear();
@@ -79,8 +53,8 @@ fn main() {
         } else {
             flash_on = false;
         }
-        // con.print(&format!("hello world: {}\n", flash));
         con.draw(flash_on, &mut can, &tc, &font);
         can.present();
     }
+    con.shutdown();
 }
