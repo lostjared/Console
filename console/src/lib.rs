@@ -261,7 +261,6 @@ pub mod console_system {
                             } else if e == std::sync::mpsc::TryRecvError::Disconnected {
                                 println!("Channel disconnected");
                                 return -1;
-                                break;
                             }
                         }
                     }
