@@ -25,6 +25,7 @@ pub mod console_system {
         child: Option<Child>,
         input_sender: Option<Sender<String>>,
         output_receiver: Option<Receiver<String>>,
+        empty: bool,
     }
 
     pub fn printtext(
@@ -190,6 +191,7 @@ pub mod console_system {
                 child: None,
                 input_sender: None,
                 output_receiver: None,
+                empty: false,
             }
         }
 
@@ -421,7 +423,19 @@ pub mod console_system {
            if check_wrap(font, self.x, self.y, self.w, self.h, &self.text) {
                 if let Some(pos) = self.text.find('\n') {
                     self.text.drain(..=pos);
+                    self.empty = true;
                 }
+            } else if self.empty == true {
+                self.empty = false;
+                if self.text.chars().count() >= 2 {
+                    if let Some(ch) = self.text.chars().nth_back(1) {
+                        if ch != '$' {
+                            self.text.push('$');
+                            self.text.push(' ');
+                        }
+                    }
+                }
+
             }
         }
     }
