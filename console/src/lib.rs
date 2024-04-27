@@ -67,7 +67,7 @@ pub mod console_system {
             }
         }
         let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
-        if(counter > total_lines-1)
+        if(counter > total_lines-2)
         {
             return true;
         }
