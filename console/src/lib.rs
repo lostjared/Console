@@ -1,14 +1,14 @@
 pub mod console_system {
     use logger::log::*;
-    use sdl2::rect::Rect;
-    use sdl2::render::TextureQuery;
-    use std::io::{{BufRead, BufReader, Write}};
-    use std::process::{{Command, Stdio, Child}};
-    use std::sync::mpsc::{{self, Sender, Receiver}};
     use sdl2::event::Event;
     use sdl2::keyboard::Keycode;
-    use std::sync::{Arc, Mutex};
+    use sdl2::rect::Rect;
+    use sdl2::render::TextureQuery;
     use std::io::Read;
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Child, Command, Stdio};
+    use std::sync::mpsc::{self, Receiver, Sender};
+    use std::sync::{Arc, Mutex};
     pub struct Console<'a> {
         x: i32,
         y: i32,
@@ -51,6 +51,28 @@ pub mod console_system {
         .expect("on font copy");
     }
 
+    pub fn check_wrap(font: &sdl2::ttf::Font, x: i32, y: i32, w: u32, h: u32, text: &str) -> bool {
+        let mut counter = 0;
+        let mut ypos = y;
+        let mut width = x;
+        let metrics = font.find_glyph_metrics('A').unwrap();
+        for ch in text.chars() {
+            if (width + metrics.advance > (w - 25) as i32) || ch == '\n' {
+                counter += 1;
+                ypos += metrics.advance + metrics.maxy;
+                width = x;
+            } else {
+                width += metrics.advance;
+            }
+        }
+        let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
+        if(counter > total_lines-1)
+        {
+            return true;
+        }
+        false
+    }
+
     /// printtext width function for printing text to the screen aligned by a certain width
     pub fn printtext_width(
         blink: bool,
@@ -64,9 +86,9 @@ pub mod console_system {
         h: u32,
         color: sdl2::pixels::Color,
         text: &str,
-    ) {
+    ) -> (i32, i32) {
         if text.is_empty() {
-            return;
+            return (0, 0);
         }
 
         let mut vlst: Vec<String> = Vec::new();
@@ -74,9 +96,11 @@ pub mod console_system {
         let metrics = font.find_glyph_metrics('A').unwrap();
         let mut ypos = y;
         let mut value = String::new();
+        let mut counter = 1;
 
         for ch in text.chars() {
             if (width + metrics.advance > (w - 25) as i32) || ch == '\n' {
+                counter += 1;
                 vlst.push(value);
                 value = String::new();
                 if ch != '\n' {
@@ -89,6 +113,9 @@ pub mod console_system {
                 width += metrics.advance;
             }
         }
+
+        
+
         if !value.is_empty() {
             vlst.push(value);
         }
@@ -100,6 +127,7 @@ pub mod console_system {
             if !i.is_empty() {
                 printtext(can, tex, font, x, yy, color, i);
             }
+
             yy += metrics.advance + metrics.maxy;
             line_index += 1;
             if yy > h as i32 - 25 {
@@ -118,11 +146,21 @@ pub mod console_system {
             ))
             .expect("failed on rect");
         }
+
+        let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
+        (counter, total_lines)
+
     }
 
     impl<'a> Console<'a> {
         /// create a new console
-        pub fn new(xx: i32, yx: i32, wx: u32, hx: u32, tex: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>) -> Console<'a> {
+        pub fn new(
+            xx: i32,
+            yx: i32,
+            wx: u32,
+            hx: u32,
+            tex: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
+        ) -> Console<'a> {
             let home_dir = dirs::home_dir();
             match home_dir {
                 Some(hdir) => {
@@ -155,13 +193,12 @@ pub mod console_system {
             }
         }
 
-
-       pub fn shutdown(&mut self) {
+        pub fn shutdown(&mut self) {
             if let Some(mut child) = self.child.take() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
-        } 
+        }
 
         pub fn start_shell(&mut self) {
             let (input_tx, input_rx) = mpsc::channel::<String>();
@@ -169,12 +206,13 @@ pub mod console_system {
             let output_tx = Arc::new(Mutex::new(output_tx));
             let mut child = Command::new("/bin/sh")
                 .arg("-i")
+                .env("PS1", "$ ")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
                 .expect("failed to start shell");
-        
+
             let stdin = child.stdin.take().unwrap();
             std::thread::spawn(move || {
                 let mut stdin = stdin;
@@ -184,16 +222,16 @@ pub mod console_system {
                     }
                 }
             });
-        
+
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
             let stdout_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let mut stdout_reader = BufReader::new(stdout);
-                let mut buffer = [0; 1]; 
+                let mut buffer = [0; 1];
                 while let Ok(bytes_read) = stdout_reader.read(&mut buffer) {
                     if bytes_read == 0 {
-                        break; 
+                        break;
                     }
                     let mut tx = stdout_tx.lock().unwrap();
                     let mut s = String::new();
@@ -204,15 +242,16 @@ pub mod console_system {
             let stderr_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let mut stderr_reader = BufReader::new(stderr);
-                let mut buffer = [0; 1]; 
+                let mut buffer = [0; 1];
                 while let Ok(bytes_read) = stderr_reader.read(&mut buffer) {
                     if bytes_read == 0 {
-                        break; 
+                        break;
                     }
                     let mut tx = stderr_tx.lock().unwrap();
                     let mut s = String::new();
                     s.push(buffer[0] as char);
-                    tx.send(s).expect("failed to send stdout byte to main thread");
+                    tx.send(s)
+                        .expect("failed to send stdout byte to main thread");
                 }
             });
             self.child = Some(child);
@@ -222,29 +261,33 @@ pub mod console_system {
         pub fn handle_sdl_events(&mut self, event_pump: &mut sdl2::EventPump) -> i32 {
             for event in event_pump.poll_iter() {
                 match event {
-                    Event::Quit {..} => { self.shutdown(); std::process::exit(0); },
-                    Event::KeyDown { keycode: Some(keycode), .. } => {
-                        match keycode {
-                            Keycode::Escape => {
-                                return -1;
-                            }
-                            Keycode::Return => {
-                                if let Some(ref sender) = self.input_sender {
-                                    if !self.input_text.is_empty() {
-                                        sender.send(self.input_text.clone()).expect("failed to send input");
-                                        self.input_text.clear();
-                                    }
-                                }
-                            },
-                            Keycode::Backspace => {
-                                self.input_text.pop();
-                            },
-                            _ => {}
+                    Event::Quit { .. } => {
+                        self.shutdown();
+                        std::process::exit(0);
+                    }
+                    Event::KeyDown {
+                        keycode: Some(keycode),
+                        ..
+                    } => match keycode {
+                        Keycode::Escape => {
+                            return -1;
                         }
+                        Keycode::Return => {
+                            if let Some(ref sender) = self.input_sender {
+                                    sender
+                                        .send(self.input_text.clone())
+                                        .expect("failed to send input");
+                                    self.input_text.clear();
+                            }
+                        }
+                        Keycode::Backspace => {
+                            self.input_text.pop();
+                        }
+                        _ => {}
                     },
                     Event::TextInput { text, .. } => {
                         self.input_text.push_str(&text);
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -253,11 +296,12 @@ pub mod console_system {
                 loop {
                     match receiver.try_recv() {
                         Ok(output_byte) => {
-                             self.text.push_str(&output_byte);
-                        },
+                          self.text.push_str(&output_byte);   
+                          print!("{}", output_byte);        
+                        }
                         Err(e) => {
                             if e == std::sync::mpsc::TryRecvError::Empty {
-                                break; 
+                                break;
                             } else if e == std::sync::mpsc::TryRecvError::Disconnected {
                                 println!("Channel disconnected");
                                 return -1;
@@ -310,28 +354,6 @@ pub mod console_system {
             self.text.push('\n');
         }
 
-        /// input keypress to the console
-        pub fn type_key(&mut self, t: &str) {
-            if self.visible {
-                self.input_text.push_str(t);
-                self.print(t);
-            }
-        }
-
-        /// input backspace key to the console
-        pub fn back(&mut self) {
-            if self.visible && !self.input_text.is_empty() {
-                self.input_text.pop();
-                self.text.pop();
-            }
-        }
-
-        /// print the prompt
-        pub fn print_prompt(&mut self) {
-            //let path = std::env::current_dir().unwrap();
-            self.print("$");
-        }
-
         /*
         fn execute_shell_command(&mut self, command: &str) {
             let mut child = Command::new("/bin/sh")
@@ -342,17 +364,17 @@ pub mod console_system {
                 .stderr(Stdio::piped())
                 .spawn()
                 .expect("Failed to execute shell");
-    
+
             if let Some(ref mut stdin) = child.stdin.take() {
                 if let Err(e) = writeln!(stdin, "{}", self.input_text) {
                     self.println(&format!("\nFailed to write to shell stdin: {}", e));
                 }
             }
-    
+
             let output = child.wait_with_output().expect("Failed to read shell output");
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-    
+
             self.println(&format!("\n{}", stdout));
             if !stderr.is_empty() {
                 self.println(&format!("{}", stderr));
@@ -369,34 +391,20 @@ pub mod console_system {
             if !self.visible {
                 return;
             }
-
+        
             match &self.background {
                 Some(b) => {
-                    let TextureQuery {
-                        width: wi,
-                        height: hi,
-                        ..
-                    } = b.query();
-                    can.copy(
-                        &b,
-                        Some(Rect::new(0, 0, wi, hi)),
-                        Some(Rect::new(0, 0, self.w, self.h)),
-                    )
-                    .expect("on background copy");
+                    let TextureQuery { width: wi, height: hi, .. } = b.query();
+                    can.copy(&b, Some(Rect::new(0, 0, wi, hi)), Some(Rect::new(0, 0, self.w, self.h)))
+                      .expect("on background copy");
                 }
                 None => {}
             }
-
-            let f = self.text.find('\n');
-            if f != None && self.text.lines().count() > (self.line_height as usize) - 1 {
-                let v = &self.text[f.unwrap() + 1..self.text.len()];
-                self.text = String::from(v);
-            }
-
+        
             let mut total = String::new();
             total.push_str(&self.text);
             total.push_str(&self.input_text);
-
+        
             printtext_width(
                 blink,
                 &mut self.line_height,
@@ -410,6 +418,11 @@ pub mod console_system {
                 self.color,
                 &total,
             );
+           if check_wrap(font, self.x, self.y, self.w, self.h, &self.text) {
+                if let Some(pos) = self.text.find('\n') {
+                    self.text.drain(..=pos);
+                }
+            }
         }
     }
 }

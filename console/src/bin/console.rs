@@ -35,9 +35,8 @@ fn main() {
     let mut con = Console::new(25, 25, width as u32, height as u32, &tc_tex);
     con.set_text_color(Color::RGB(255, 255, 255));
     con.set_background(bg_tex);
-    con.print_prompt();
     con.set_visible(true);
-    con.start_shell(); 
+    con.start_shell();
 
     'main: loop {
         if con.handle_sdl_events(&mut e) == -1 {
