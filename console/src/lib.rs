@@ -1,3 +1,6 @@
+// doesn't work right on MacOS
+// works on Ubuntu
+
 pub mod console_system {
     use logger::log::*;
     use sdl2::event::Event;
