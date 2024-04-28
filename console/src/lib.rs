@@ -279,6 +279,8 @@ pub mod console_system {
                                     sender
                                         .send(self.input_text.clone())
                                         .expect("failed to send input");
+                                    self.text.push_str(&self.input_text);
+                                    self.text.push('\n');
                                     self.input_text.clear();
                             }
                         }
