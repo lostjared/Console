@@ -225,7 +225,6 @@ pub mod console_system {
                     if writeln!(stdin, "{}", input).is_err() {
                         break;
                     }
-                    stdin.flush().expect("flush");
                 }
             });
 
