@@ -427,15 +427,14 @@ pub mod console_system {
                 }
             } else if self.empty == true {
                 self.empty = false;
-                if self.text.chars().count() >= 2 {
+                /*if self.text.chars().count() >= 2 {
                     if let Some(ch) = self.text.chars().nth_back(1) {
                         if ch != '$' {
                             self.text.push('$');
                             self.text.push(' ');
                         }
                     }
-                }
-
+                }*/
             }
         }
     }
