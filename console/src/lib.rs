@@ -216,31 +216,32 @@ pub mod console_system {
                 .expect("failed to start shell");
 
             let stdin = child.stdin.take().unwrap();
+            let stdout = child.stdout.take().unwrap();
+            let stderr = child.stderr.take().unwrap();
+          
             std::thread::spawn(move || {
                 let mut stdin = stdin;
                 for input in input_rx {
                     if writeln!(stdin, "{}", input).is_err() {
                         break;
                     }
+                    stdin.flush().expect("flush");
                 }
             });
 
-            let stdout = child.stdout.take().unwrap();
-            let stderr = child.stderr.take().unwrap();
+            
             let stdout_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let mut stdout_reader = BufReader::new(stdout);
-                let mut buffer = [0; 1];
-                while let Ok(bytes_read) = stdout_reader.read(&mut buffer) {
-                    if bytes_read == 0 {
-                        break;
+                for line in stdout_reader.lines() {
+                    if let Ok(line) = line {
+                        let mut tx = stdout_tx.lock().unwrap();
+                        tx.send(line).expect("on send");
+                        tx.send(String::from("\n")).expect("on send");
                     }
-                    let mut tx = stdout_tx.lock().unwrap();
-                    let mut s = String::new();
-                    s.push(buffer[0] as char);
-                    tx.send(s).expect("failed to send stdout byte to main thread");
                 }
             });
+            
             let stderr_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let mut stderr_reader = BufReader::new(stderr);
