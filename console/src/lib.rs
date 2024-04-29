@@ -210,7 +210,7 @@ pub mod console_system {
             let (input_tx, input_rx) = mpsc::channel::<String>();
             let (output_tx, output_rx) = mpsc::channel::<String>();
             let output_tx = Arc::new(Mutex::new(output_tx));
-            let mut child = Command::new("/bin/sh")
+            let mut child = Command::new("/bin/bash")
                 .arg("-i")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
