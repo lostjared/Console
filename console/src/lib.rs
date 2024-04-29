@@ -70,8 +70,7 @@ pub mod console_system {
             }
         }
         let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
-        if(counter > total_lines-2)
-        {
+        if counter > total_lines-2 {
             return true;
         }
         false
@@ -90,21 +89,27 @@ pub mod console_system {
         h: u32,
         color: sdl2::pixels::Color,
         text: &str,
-    ) -> (i32, i32) {
+    ) -> (i32, i32, i32) {
         if text.is_empty() {
-            return (0, 0);
+            return (0, 0, 0);
         }
 
         let mut vlst: Vec<String> = Vec::new();
         let mut width = x;
         let metrics = font.find_glyph_metrics('A').unwrap();
-        let mut ypos = y;
         let mut value = String::new();
         let mut counter = 1;
+        let mut first_line = 0;
+        let mut index = 0;
+        let mut ypos = y;
+
 
         for ch in text.chars() {
             if (width + metrics.advance > (w - 25) as i32) || ch == '\n' {
                 counter += 1;
+                if first_line == 0 {
+                    first_line = index;
+                }
                 vlst.push(value);
                 value = String::new();
                 if ch != '\n' {
@@ -116,9 +121,8 @@ pub mod console_system {
                 value.push(ch);
                 width += metrics.advance;
             }
+            index += 1;
         }
-
-        
 
         if !value.is_empty() {
             vlst.push(value);
@@ -152,7 +156,7 @@ pub mod console_system {
         }
 
         let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
-        (counter, total_lines)
+        (counter, total_lines, first_line)
 
     }
 
@@ -412,7 +416,7 @@ pub mod console_system {
             total.push_str(&self.text);
             total.push_str(&self.input_text);
         
-            printtext_width(
+            let pos = printtext_width(
                 blink,
                 &mut self.line_height,
                 can,
@@ -426,8 +430,8 @@ pub mod console_system {
                 &total,
             );
            if check_wrap(font, self.x, self.y, self.w, self.h, &self.text) {
-                if let Some(pos) = self.text.find('\n') {
-                    self.text.drain(..=pos);
+                if pos.2 > 0 {
+                    self.text.drain(..=pos.2 as usize);
                     self.empty = true;
                 }
             } else if self.empty == true {
