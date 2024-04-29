@@ -309,8 +309,8 @@ pub mod console_system {
                             if let Some(ref sender) = self.input_sender {
                                 #[cfg(target_os = "linux")]
                                 {
-                                    self.text.push_str(&self.input_text);
-                                    self.text.push('\n');
+                                    //self.text.push_str(&self.input_text);
+                                    //self.text.push('\n');
                                 }
 
                                 if self.input_text == "clear" {
