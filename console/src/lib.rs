@@ -283,11 +283,15 @@ pub mod console_system {
                         }
                         Keycode::Return => {
                             if let Some(ref sender) = self.input_sender {
+                                #[cfg(target_os = "linux")] {
+                                    self.text.push_str(&self.input_text);
+                                    self.text.push('\n');
+                                }
+                                   
                                     sender
                                         .send(self.input_text.clone())
                                         .expect("failed to send input");
-                                    //self.text.push_str(&self.input_text);
-                                    //self.text.push('\n');
+
                                     self.input_text.clear();
                             }
                         }
