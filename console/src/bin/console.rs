@@ -37,7 +37,7 @@ fn main() {
     con.set_background(bg_tex);
     con.set_visible(true);
     con.start_shell();
-
+    
     'main: loop {
         if con.handle_sdl_events(&mut e) == -1 {
             break 'main;

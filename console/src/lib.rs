@@ -306,13 +306,11 @@ pub mod console_system {
                     _ => {}
                 }
             }
-
             if let Some(ref receiver) = self.output_receiver {
                 loop {
                     match receiver.try_recv() {
                         Ok(output_byte) => {
                           self.text.push_str(&output_byte);   
-                          print!("{}", output_byte);        
                         }
                         Err(e) => {
                             if e == std::sync::mpsc::TryRecvError::Empty {
