@@ -1,5 +1,4 @@
-// doesn't work right on MacOS
-// works on Ubuntu
+// almost works right on MacOS and Linux
 
 pub mod console_system {
     use logger::log::*;
