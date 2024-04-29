@@ -212,7 +212,7 @@ pub mod console_system {
             let output_tx = Arc::new(Mutex::new(output_tx));
             let mut child = Command::new("/bin/bash")
                 .arg("-i")
-                .env("PS1", r"\u@\h [\w] \$ ")
+                .env("PS1", "\\u@\\h [\\w] $ ")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
