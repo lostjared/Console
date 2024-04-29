@@ -55,15 +55,15 @@ pub mod console_system {
         .expect("on font copy");
     }
 
-    pub fn check_wrap(font: &sdl2::ttf::Font, x: i32, y: i32, w: u32, h: u32, text: &str) -> bool {
+    pub fn check_wrap(font: &sdl2::ttf::Font, x: i32, _y: i32, w: u32, h: u32, text: &str) -> bool {
         let mut counter = 0;
-        let mut ypos = y;
+        //let mut ypos = y;
         let mut width = x;
         let metrics = font.find_glyph_metrics('A').unwrap();
         for ch in text.chars() {
             if (width + metrics.advance > (w - 25) as i32) || ch == '\n' {
                 counter += 1;
-                ypos += metrics.advance + metrics.maxy;
+                //ypos += metrics.advance + metrics.maxy;
                 width = x;
             } else {
                 width += metrics.advance;
@@ -238,10 +238,10 @@ pub mod console_system {
             
             let stdout_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
-                let mut stdout_reader = BufReader::new(stdout);
+                let stdout_reader = BufReader::new(stdout);
                 for line in stdout_reader.lines() {
                     if let Ok(line) = line {
-                        let mut tx = stdout_tx.lock().unwrap();
+                        let tx = stdout_tx.lock().unwrap();
                         tx.send(line).expect("on send");
                         tx.send(String::from("\n")).expect("on send");
                     }
@@ -256,7 +256,7 @@ pub mod console_system {
                     if bytes_read == 0 {
                         break;
                     }
-                    let mut tx = stderr_tx.lock().unwrap();
+                    let tx = stderr_tx.lock().unwrap();
                     let mut s = String::new();
                     s.push(buffer[0] as char);
                     tx.send(s)
