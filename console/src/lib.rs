@@ -279,7 +279,8 @@ pub mod console_system {
                         ..
                     } => match keycode {
                         Keycode::Escape => {
-                            return -1;
+                            self.shutdown();
+                            std::process::exit(0);
                         }
                         Keycode::Return => {
                             if let Some(ref sender) = self.input_sender {
