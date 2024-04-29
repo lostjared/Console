@@ -261,6 +261,16 @@ pub mod console_system {
             self.child = Some(child);
             self.input_sender = Some(input_tx);
             self.output_receiver = Some(output_rx);
+            self.system("export PS1=\"\\u@\\h [\\w] $ \"");
+
+        }
+        pub fn system(&self, text: &str) {
+            if let Some(ref sender) = self.input_sender {
+                let ctext = String::from(text);
+                sender
+                    .send(ctext.clone())
+                    .expect("failed to send input");
+            }
         }
         pub fn handle_sdl_events(&mut self, event_pump: &mut sdl2::EventPump) -> i32 {
             for event in event_pump.poll_iter() {
