@@ -46,7 +46,7 @@ fn main() {
         can.clear();
         flash += 1;
         let flash_on;
-        if flash > 10 {
+        if flash > 2 {
             flash_on = true;
             flash = 0;
         } else {
