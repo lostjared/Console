@@ -68,8 +68,8 @@ pub mod console_system {
                 width += metrics.advance;
             }
         }
-        let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
-        if counter > total_lines-2 {
+        let total_lines = h as i32 / (metrics.advance as i32 + metrics.maxy as i32);
+        if counter > total_lines - 2 {
             return true;
         }
         false
@@ -101,7 +101,6 @@ pub mod console_system {
         let mut first_line = 0;
         let mut index = 0;
         let mut ypos = y;
-
 
         for ch in text.chars() {
             if (width + metrics.advance > (w - 25) as i32) || ch == '\n' {
@@ -154,9 +153,8 @@ pub mod console_system {
             .expect("failed on rect");
         }
 
-        let total_lines = h as i32/(metrics.advance as i32 +metrics.maxy as i32);
+        let total_lines = h as i32 / (metrics.advance as i32 + metrics.maxy as i32);
         (counter, total_lines, first_line)
-
     }
 
     impl<'a> Console<'a> {
@@ -214,7 +212,7 @@ pub mod console_system {
             let output_tx = Arc::new(Mutex::new(output_tx));
             let mut child = Command::new("/bin/sh")
                 .arg("-i")
-                .env("PS1", "$ ")
+                .env("PS1", "[\\w] $ ")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -224,7 +222,7 @@ pub mod console_system {
             let stdin = child.stdin.take().unwrap();
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
-          
+
             std::thread::spawn(move || {
                 let mut stdin = stdin;
                 for input in input_rx {
@@ -233,8 +231,6 @@ pub mod console_system {
                     }
                 }
             });
-
-            
             let stdout_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let stdout_reader = BufReader::new(stdout);
@@ -246,7 +242,7 @@ pub mod console_system {
                     }
                 }
             });
-            
+
             let stderr_tx = Arc::clone(&output_tx);
             std::thread::spawn(move || {
                 let mut stderr_reader = BufReader::new(stderr);
@@ -282,17 +278,45 @@ pub mod console_system {
                             std::process::exit(0);
                         }
                         Keycode::Return => {
+                            let values: Vec<&str> = self.input_text.split_whitespace().collect();
+                            if values.len() >= 4 && values[0].eq_ignore_ascii_case("setcolor") {
+                                if let (Ok(r), Ok(g), Ok(b)) = (
+                                    values[1].parse::<u8>(),
+                                    values[2].parse::<u8>(),
+                                    values[3].parse::<u8>(),
+                                ) {
+                                    self.set_text_color(sdl2::pixels::Color::RGB(r, g, b));
+                                    self.text.push_str("Color set...\n");
+                                    self.input_text.clear();
+                                    self.text.push_str("$ ");
+
+                                } else {
+                                    self.println("\nSystem: Error setting color");
+                                    self.input_text.clear();
+                                    self.text.push_str("$ ");
+                                    break;
+                                }
+                            } 
+
                             if let Some(ref sender) = self.input_sender {
-                                #[cfg(target_os = "linux")] {
+                                #[cfg(target_os = "linux")]
+                                {
                                     self.text.push_str(&self.input_text);
                                     self.text.push('\n');
                                 }
-                                   
-                                    sender
-                                        .send(self.input_text.clone())
-                                        .expect("failed to send input");
 
+                                if self.input_text == "clear" {
+                                    self.text.clear();
+                                    self.text.push_str("$ ");
                                     self.input_text.clear();
+                                    break;
+                                }
+
+                                sender
+                                    .send(self.input_text.clone())
+                                    .expect("failed to send input");
+
+                                self.input_text.clear();
                             }
                         }
                         Keycode::Backspace => {
@@ -310,7 +334,7 @@ pub mod console_system {
                 loop {
                     match receiver.try_recv() {
                         Ok(output_byte) => {
-                          self.text.push_str(&output_byte);   
+                            self.text.push_str(&output_byte);
                         }
                         Err(e) => {
                             if e == std::sync::mpsc::TryRecvError::Empty {
@@ -404,20 +428,28 @@ pub mod console_system {
             if !self.visible {
                 return;
             }
-        
+
             match &self.background {
                 Some(b) => {
-                    let TextureQuery { width: wi, height: hi, .. } = b.query();
-                    can.copy(&b, Some(Rect::new(0, 0, wi, hi)), Some(Rect::new(0, 0, self.w, self.h)))
-                      .expect("on background copy");
+                    let TextureQuery {
+                        width: wi,
+                        height: hi,
+                        ..
+                    } = b.query();
+                    can.copy(
+                        &b,
+                        Some(Rect::new(0, 0, wi, hi)),
+                        Some(Rect::new(0, 0, self.w, self.h)),
+                    )
+                    .expect("on background copy");
                 }
                 None => {}
             }
-        
+
             let mut total = String::new();
             total.push_str(&self.text);
             total.push_str(&self.input_text);
-        
+
             let pos = printtext_width(
                 blink,
                 &mut self.line_height,
@@ -431,7 +463,7 @@ pub mod console_system {
                 self.color,
                 &total,
             );
-           if check_wrap(font, self.x, self.y, self.w, self.h, &self.text) {
+            if check_wrap(font, self.x, self.y, self.w, self.h, &self.text) {
                 if pos.2 > 0 {
                     self.text.drain(..=pos.2 as usize);
                     self.empty = true;
