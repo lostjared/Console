@@ -212,7 +212,6 @@ pub mod console_system {
             let output_tx = Arc::new(Mutex::new(output_tx));
             let mut child = Command::new("/bin/bash")
                 .arg("-i")
-                .env("PS1", "\\u@\\h [\\w] $ ")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -262,7 +261,6 @@ pub mod console_system {
             self.input_sender = Some(input_tx);
             self.output_receiver = Some(output_rx);
             self.system("export PS1=\"\\u@\\h [\\w] $ \"");
-
         }
         pub fn system(&self, text: &str) {
             if let Some(ref sender) = self.input_sender {
